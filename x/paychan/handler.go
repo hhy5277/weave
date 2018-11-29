@@ -38,7 +38,7 @@ var _ weave.Handler = (*createPaymentChannelHandler)(nil)
 func (h *createPaymentChannelHandler) Check(ctx weave.Context, db weave.KVStore, tx weave.Tx) (weave.CheckResult, error) {
 	var res weave.CheckResult
 	if _, err := h.validate(ctx, db, tx); err != nil {
-		return res, err
+		return res, errors.E(err, "invalid message")
 	}
 
 	res.GasAllocated += createPaymentChannelCost
@@ -48,11 +48,21 @@ func (h *createPaymentChannelHandler) Check(ctx weave.Context, db weave.KVStore,
 func (h *createPaymentChannelHandler) validate(ctx weave.Context, db weave.KVStore, tx weave.Tx) (*CreatePaymentChannelMsg, error) {
 	rmsg, err := tx.GetMsg()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(err, "cannot get message")
 	}
 	msg, ok := rmsg.(*CreatePaymentChannelMsg)
 	if !ok {
-		return nil, errors.ErrUnknownTxType(rmsg)
+		// TODO
+		//
+		// ErrUnknownTxType is defined in different module, so for now
+		// let's ignore that fact
+		//
+		// return nil, errors.ErrUnknownTxType(rmsg)
+		//
+		// this should be instead something like
+		//
+		// return nil, errors.E(errors.CodeUnknownTxType, errors.Labelf("tx=%T", rmsg))
+		return nil, errors.E(CodeTODO, "unknown tx type", errors.Labelf("tx=%T", rmsg))
 	}
 
 	if err := msg.Validate(); err != nil {
@@ -61,10 +71,13 @@ func (h *createPaymentChannelHandler) validate(ctx weave.Context, db weave.KVSto
 
 	// Ensure that the timeout is in the future.
 	if height, _ := weave.GetHeight(ctx); msg.Timeout <= height {
-		return msg, ErrInvalidTimeout(msg.Timeout)
+		return msg, errors.E(CodeInvalidCondition, "timeout in the past")
 	}
 
 	if !h.auth.HasAddress(ctx, msg.Src) {
+		// TODO replace with
+		//
+		// return msg, errors.E(errors.CodeUnauthorized)
 		return msg, errors.ErrUnauthorized()
 	}
 
@@ -75,7 +88,7 @@ func (h *createPaymentChannelHandler) Deliver(ctx weave.Context, db weave.KVStor
 	var res weave.DeliverResult
 	msg, err := h.validate(ctx, db, tx)
 	if err != nil {
-		return res, err
+		return res, errors.E(err, "invalid message")
 	}
 
 	obj, err := h.bucket.Create(db, &PaymentChannel{
@@ -88,18 +101,18 @@ func (h *createPaymentChannelHandler) Deliver(ctx weave.Context, db weave.KVStor
 		Transferred:  &x.Coin{Ticker: msg.Total.Ticker},
 	})
 	if err != nil {
-		return res, err
+		return res, errors.E(err, "cannot create in bucket")
 	}
 
 	// Move coins from sender account and deposit total amount available on
 	// that channels account.
 	dst := paymentChannelAccount(obj.Key())
 	if err := h.cash.MoveCoins(db, msg.Src, dst, *msg.Total); err != nil {
-		return res, err
+		return res, errors.E(err, "cannot move coins")
 	}
 
 	res.Data = obj.Key()
-	return res, err
+	return res, nil
 }
 
 type transferPaymentChannelHandler struct {
@@ -113,7 +126,7 @@ var _ weave.Handler = (*transferPaymentChannelHandler)(nil)
 func (h *transferPaymentChannelHandler) Check(ctx weave.Context, db weave.KVStore, tx weave.Tx) (weave.CheckResult, error) {
 	var res weave.CheckResult
 	if _, err := h.validate(ctx, db, tx); err != nil {
-		return res, err
+		return res, errors.E(err, "invalid message")
 	}
 	res.GasAllocated += transferPaymentChannelCost
 	return res, nil
@@ -122,10 +135,11 @@ func (h *transferPaymentChannelHandler) Check(ctx weave.Context, db weave.KVStor
 func (h *transferPaymentChannelHandler) validate(ctx weave.Context, db weave.KVStore, tx weave.Tx) (*TransferPaymentChannelMsg, error) {
 	rmsg, err := tx.GetMsg()
 	if err != nil {
-		return nil, err
+		return nil, errors.E(err, "cannot get message")
 	}
 	msg, ok := rmsg.(*TransferPaymentChannelMsg)
 	if !ok {
+		// TODO replace like before
 		return nil, errors.ErrUnknownTxType(rmsg)
 	}
 

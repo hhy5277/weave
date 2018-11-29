@@ -2,6 +2,7 @@ package paychan
 
 import (
 	"github.com/iov-one/weave"
+	"github.com/iov-one/weave/errors"
 	"github.com/iov-one/weave/orm"
 )
 
@@ -10,28 +11,30 @@ var _ orm.CloneableData = (*PaymentChannel)(nil)
 // Validate ensures the payment channel is valid.
 func (pc *PaymentChannel) Validate() error {
 	if pc.Src == nil {
-		return ErrMissingSrc()
+		return errors.E(CodeMissingCondition, "missing src")
 	}
 	if pc.SenderPubkey == nil {
-		return ErrMissingSenderPubkey()
+		return errors.E(CodeMissingCondition, "missing sender pubkey")
 	}
 	if pc.Recipient == nil {
-		return ErrMissingRecipient()
+		return errors.E(CodeMissingCondition, "missing recipient")
 	}
 	if pc.Timeout <= 0 {
-		return ErrInvalidTimeout(pc.Timeout)
+		return errors.E(CodeInvalidCondition, "timeout too small",
+			errors.Labelf("timeout=%d", pc.Timeout))
 	}
 	if pc.Total == nil || !pc.Total.IsPositive() {
-		return ErrInvalidTotal(pc.Total)
+		return errors.E(CodeInvalidCondition, "non positive total",
+			errors.Labelf("total=%s", pc.Total))
 	}
 	if len(pc.Memo) > 128 {
-		return ErrInvalidMemo(pc.Memo)
+		return errors.E(CodeInvalidCondition, "memo too long")
 	}
 
 	// Transfer value must not be greater than the Total value represented
 	// by the PaymentChannel.
 	if pc.Transferred == nil || !pc.Transferred.IsNonNegative() || pc.Transferred.Compare(*pc.Total) > 0 {
-		return ErrInvalidTransferred(pc.Transferred)
+		return errors.E(CodeInvalidCondition, "invalid transferred")
 	}
 	return nil
 }
@@ -81,11 +84,11 @@ func (b *PaymentChannelBucket) GetPaymentChannel(db weave.KVStore, paymentChanne
 		return nil, err
 	}
 	if obj == nil || obj.Value() == nil {
-		return nil, ErrNoSuchPaymentChannel(paymentChannelID)
+		return nil, errors.E(CodeNotFound, "payment channel not found")
 	}
 	pc, ok := obj.Value().(*PaymentChannel)
 	if !ok {
-		return nil, ErrNoSuchPaymentChannel(paymentChannelID)
+		return nil, errors.E(CodeNotFound, "payment channel not found")
 	}
 	return pc, nil
 }
