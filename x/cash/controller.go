@@ -72,7 +72,7 @@ func (c BaseController) MoveCoins(store weave.KVStore,
 		return err
 	}
 	if sender == nil {
-		return errors.ErrEmpty.Newf("empty account %#v", src)
+		return errors.ErrEmpty.Newf("empty account %s", src)
 	}
 	if !AsCoins(sender).Contains(amount) {
 		return errors.ErrInsufficientAmount.New("funds")

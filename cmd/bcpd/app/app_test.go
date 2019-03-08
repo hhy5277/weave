@@ -13,6 +13,7 @@ import (
 	"github.com/iov-one/weave/app"
 	"github.com/iov-one/weave/coin"
 	"github.com/iov-one/weave/crypto"
+	"github.com/iov-one/weave/weavetest"
 	"github.com/iov-one/weave/x/batch"
 	"github.com/iov-one/weave/x/cash"
 	"github.com/iov-one/weave/x/escrow"
@@ -27,7 +28,7 @@ import (
 
 func TestSendTx(t *testing.T) {
 	chainID := "test-net-22"
-	mainAccount := &account{pk: crypto.GenPrivKeyEd25519()}
+	mainAccount := &account{pk: weavetest.NewKey()}
 	myApp := newTestApp(t, chainID, []*account{mainAccount})
 	var amount int64 = 2000
 	// Query for my balance
@@ -40,7 +41,7 @@ func TestSendTx(t *testing.T) {
 	})
 
 	// build and sign a transaction
-	pk2 := crypto.GenPrivKeyEd25519()
+	pk2 := weavetest.NewKey()
 	addr2 := pk2.PublicKey().Address()
 	dres := sendBatch(t, false, myApp, chainID, 2, []*account{mainAccount}, mainAccount.address(), addr2, amount, "ETH", "Have a great trip!")
 	require.Equal(t, 3, len(dres.Tags), "%#v", dres.Tags)
@@ -76,7 +77,7 @@ func TestSendTx(t *testing.T) {
 	// Query for new balances (same query, new state)
 	queryBalance()
 
-	pk3 := crypto.GenPrivKeyEd25519()
+	pk3 := weavetest.NewKey()
 	addr3 := pk3.PublicKey().Address()
 	dres = sendBatch(t, true, myApp, chainID, 2, []*account{mainAccount}, mainAccount.address(), addr3, amount, "ETH", "Have a great trip!")
 	// Query for balances (should be unchanged because of fail)
@@ -91,11 +92,11 @@ func toHex(s string) string {
 
 func TestQuery(t *testing.T) {
 	chainID := "test-net-22"
-	mainAccount := &account{pk: crypto.GenPrivKeyEd25519()}
+	mainAccount := &account{pk: weavetest.NewKey()}
 	myApp := newTestApp(t, chainID, []*account{mainAccount})
 
 	// build and sign a transaction
-	pk2 := crypto.GenPrivKeyEd25519()
+	pk2 := weavetest.NewKey()
 	addr2 := pk2.PublicKey().Address()
 	sendToken(t, myApp, chainID, 2, []*account{mainAccount}, mainAccount.address(), addr2, 2000, "ETH", "Have a great trip!")
 
@@ -126,19 +127,19 @@ func TestQuery(t *testing.T) {
 
 func TestMultisigContract(t *testing.T) {
 	chainID := "test-net-22"
-	mainAccount := &account{pk: crypto.GenPrivKeyEd25519()}
+	mainAccount := &account{pk: weavetest.NewKey()}
 	myApp := newTestApp(t, chainID, []*account{mainAccount})
 
 	// create recoveryContract
-	recovery1 := crypto.GenPrivKeyEd25519()
-	recovery2 := crypto.GenPrivKeyEd25519()
-	recovery3 := crypto.GenPrivKeyEd25519()
+	recovery1 := weavetest.NewKey()
+	recovery2 := weavetest.NewKey()
+	recovery3 := weavetest.NewKey()
 	recoveryContract := createContract(t, myApp, chainID, 3, []*account{mainAccount},
 		2, recovery1.PublicKey().Address(), recovery2.PublicKey().Address(), recovery3.PublicKey().Address())
 
 	// create safeKeyContract contract
 	// can be activated by masterKey or recoveryContract
-	masterKey := crypto.GenPrivKeyEd25519()
+	masterKey := weavetest.NewKey()
 	safeKeyContract := createContract(t, myApp, chainID, 4, []*account{mainAccount},
 		1, masterKey.PublicKey().Address(), multisig.MultiSigCondition(recoveryContract).Address())
 
@@ -148,20 +149,20 @@ func TestMultisigContract(t *testing.T) {
 		mainAccount.address(), safeKeyContractAddr, 2000, "ETH", "New wallet controlled by safeKeyContract")
 
 	// build and sign a transaction using master key to activate safeKeyContract
-	receiver := crypto.GenPrivKeyEd25519()
+	receiver := weavetest.NewKey()
 	sendToken(t, myApp, chainID, 6, []*account{{pk: masterKey}},
 		safeKeyContractAddr, receiver.PublicKey().Address(), 1000, "ETH", "Gift from a contract!", safeKeyContract)
 
 	// Now do the same operation but using recoveryContract to activate safeKeyContract
 	// create a new receiver so it is easy to check its balance (no need to remember previous one)
-	receiver = crypto.GenPrivKeyEd25519()
+	receiver = weavetest.NewKey()
 	sendToken(t, myApp, chainID, 7, []*account{{pk: recovery1}, {pk: recovery2}},
 		safeKeyContractAddr, receiver.PublicKey().Address(), 1000, "ETH", "Another gift from a contract!",
 		recoveryContract, safeKeyContract)
 }
 
 type account struct {
-	pk *crypto.PrivateKey
+	pk crypto.Signer
 	n  int64
 }
 
@@ -177,7 +178,8 @@ func (a *account) address() []byte {
 
 // newTestApp creates a new app with a wallet for each account
 // coins and tokens are the same across all accounts and calls
-func newTestApp(t require.TestingT, chainID string, accounts []*account) app.BaseApp {
+func newTestApp(t Tester, chainID string, accounts []*account) app.BaseApp {
+	t.Helper()
 	// no minimum fee, in-memory data-store
 	abciApp, err := GenerateApp("", log.NewNopLogger(), true)
 	require.NoError(t, err)
@@ -197,7 +199,9 @@ func newTestApp(t require.TestingT, chainID string, accounts []*account) app.Bas
 	return myApp
 }
 
-func newMultisigTestApp(t require.TestingT, chainID string, contracts []*contract) app.BaseApp {
+func newMultisigTestApp(t Tester, chainID string, contracts []*contract) app.BaseApp {
+	t.Helper()
+
 	// no minimum fee, in-memory data-store
 	abciApp, err := GenerateApp("", log.NewNopLogger(), true)
 	require.NoError(t, err)
@@ -217,7 +221,8 @@ func newMultisigTestApp(t require.TestingT, chainID string, contracts []*contrac
 	return myApp
 }
 
-func withWalletAppState(t require.TestingT, accounts []*account) string {
+func withWalletAppState(t Tester, accounts []*account) string {
+	t.Helper()
 	type wallet struct {
 		Address weave.Address `json:"address"`
 		Coins   coin.Coins    `json:"coins"`
@@ -228,7 +233,7 @@ func withWalletAppState(t require.TestingT, accounts []*account) string {
 	}{
 		Gconf: map[string]interface{}{
 			cash.GconfCollectorAddress: "66616b652d636f6c6c6563746f722d61646472657373",
-			cash.GconfMinimalFee:       coin.Coin{}, // no fee
+			cash.GconfMinimalFee:       coin.NewCoin(0, 0, ""), // No fee.
 		},
 	}
 
@@ -252,7 +257,7 @@ type contract struct {
 	threshold   int64
 }
 
-func (c *contract) address() []byte {
+func (c *contract) address() weave.Address {
 	return multisig.MultiSigCondition(c.id).Address()
 }
 
@@ -270,7 +275,8 @@ func (c *contract) signers() []*account {
 	return c.accountSigs[:c.threshold]
 }
 
-func appStateGenesis(t require.TestingT, contracts []*contract) string {
+func appStateGenesis(t Tester, contracts []*contract) string {
+	t.Helper()
 	type dt map[string]interface{}
 	type arr []interface{}
 
@@ -287,13 +293,14 @@ func appStateGenesis(t require.TestingT, contracts []*contract) string {
 	}
 
 	state := dt{
-		"wallets": wallets,
+		"cash": wallets,
 		"currencies": arr{
 			dt{"ticker": "ETH", "name": "Smells like ethereum", "sig_figs": 9},
 			dt{"ticker": "FRNK", "name": "Frankie", "sig_figs": 3},
 		},
 		"gconf": dt{
-			"cash:collector_address": "66616b652d636f6c6c6563746f722d61646472657373",
+			cash.GconfCollectorAddress: "66616b652d636f6c6c6563746f722d61646472657373",
+			cash.GconfMinimalFee:       coin.NewCoin(0, 0, ""), // No fee.
 		},
 	}
 
@@ -306,8 +313,20 @@ func appStateGenesis(t require.TestingT, contracts []*contract) string {
 
 // sendToken creates the transaction, signs it and sends it
 // checks money has arrived safely
-func sendToken(t require.TestingT, baseApp app.BaseApp, chainID string, height int64, signers []*account,
-	from, to []byte, amount int64, ticker, memo string, contracts ...[]byte) abci.ResponseDeliverTx {
+func sendToken(
+	t Tester,
+	baseApp app.BaseApp,
+	chainID string,
+	height int64,
+	signers []*account,
+	from []byte,
+	to []byte,
+	amount int64,
+	ticker string,
+	memo string,
+	contracts ...[]byte,
+) abci.ResponseDeliverTx {
+	t.Helper()
 	msg := &cash.SendMsg{
 		Src:  from,
 		Dest: to,
@@ -336,8 +355,21 @@ func sendToken(t require.TestingT, baseApp app.BaseApp, chainID string, height i
 }
 
 // checks batchWorks
-func sendBatch(t require.TestingT, fail bool, baseApp app.BaseApp, chainID string, height int64, signers []*account,
-	from, to []byte, amount int64, ticker, memo string, contracts ...[]byte) abci.ResponseDeliverTx {
+func sendBatch(
+	t Tester,
+	fail bool,
+	baseApp app.BaseApp,
+	chainID string,
+	height int64,
+	signers []*account,
+	from []byte,
+	to []byte,
+	amount int64,
+	ticker string,
+	memo string,
+	contracts ...[]byte,
+) abci.ResponseDeliverTx {
+	t.Helper()
 	msg := &cash.SendMsg{
 		Src:  from,
 		Dest: to,
@@ -390,7 +422,16 @@ func sendBatch(t require.TestingT, fail bool, baseApp app.BaseApp, chainID strin
 
 // createContract creates an immutable contract, signs the transaction and sends it
 // checks contract has been created correctly
-func createContract(t require.TestingT, baseApp app.BaseApp, chainID string, height int64, signers []*account, activationThreshold int64, contractSigs ...[]byte) []byte {
+func createContract(
+	t Tester,
+	baseApp app.BaseApp,
+	chainID string,
+	height int64,
+	signers []*account,
+	activationThreshold int64,
+	contractSigs ...[]byte,
+) []byte {
+	t.Helper()
 	msg := &multisig.CreateContractMsg{
 		Sigs:                contractSigs,
 		ActivationThreshold: activationThreshold,
@@ -416,8 +457,16 @@ func createContract(t require.TestingT, baseApp app.BaseApp, chainID string, hei
 }
 
 // signAndCommit signs tx with signatures from signers and submits to the chain
-// asserts and fails the test in case of errors during the process
-func signAndCommit(t require.TestingT, fail bool, app app.BaseApp, tx *Tx, signers []*account, chainID string, height int64) abci.ResponseDeliverTx {
+// asserts and fails the test in case of errors during the process.
+func signAndCommit(
+	t Tester, fail bool,
+	app app.BaseApp,
+	tx *Tx,
+	signers []*account,
+	chainID string,
+	height int64,
+) abci.ResponseDeliverTx {
+	t.Helper()
 	for _, signer := range signers {
 		sig, err := sigs.SignTx(signer.pk, tx, chainID, signer.nonce())
 		require.NoError(t, err)
@@ -449,7 +498,8 @@ func signAndCommit(t require.TestingT, fail bool, app app.BaseApp, tx *Tx, signe
 }
 
 // queryAndCheckWallet queries the wallet from the chain and check it is the one expected
-func queryAndCheckWallet(t require.TestingT, fail bool, baseApp app.BaseApp, path string, data []byte, expected cash.Set) {
+func queryAndCheckWallet(t Tester, fail bool, baseApp app.BaseApp, path string, data []byte, expected cash.Set) {
+	t.Helper()
 	query := abci.RequestQuery{Path: path, Data: data}
 	res := baseApp.Query(query)
 
@@ -469,7 +519,8 @@ func queryAndCheckWallet(t require.TestingT, fail bool, baseApp app.BaseApp, pat
 }
 
 // queryAndCheckContract queries the contract from the chain and check it is the one expected
-func queryAndCheckContract(t require.TestingT, baseApp app.BaseApp, path string, data []byte, expected multisig.Contract) {
+func queryAndCheckContract(t Tester, baseApp app.BaseApp, path string, data []byte, expected multisig.Contract) {
+	t.Helper()
 	query := abci.RequestQuery{Path: path, Data: data}
 	res := baseApp.Query(query)
 
@@ -485,7 +536,8 @@ func queryAndCheckContract(t require.TestingT, baseApp app.BaseApp, path string,
 
 // makeSendTx is a special case of sendToken when the sender account is the only signer
 // this is used in our benchmark
-func makeSendTx(t require.TestingT, chainID string, sender, receiver *account, ticker, memo string, amount int64) []byte {
+func makeSendTx(t Tester, chainID string, sender, receiver *account, ticker, memo string, amount int64) []byte {
+	t.Helper()
 	msg := &cash.SendMsg{
 		Src:  sender.address(),
 		Dest: receiver.address(),
@@ -512,7 +564,8 @@ func makeSendTx(t require.TestingT, chainID string, sender, receiver *account, t
 
 // makeSendTxMultisig is a special case of sendToken when the sender and receiver accounts are a contract
 // this is used in our benchmark
-func makeSendTxMultisig(t require.TestingT, chainID string, sender, receiver *contract, ticker, memo string, amount int64) []byte {
+func makeSendTxMultisig(t Tester, chainID string, sender, receiver *contract, ticker, memo string, amount int64) []byte {
+	t.Helper()
 	msg := &cash.SendMsg{
 		Src:  sender.address(),
 		Dest: receiver.address(),
@@ -541,7 +594,8 @@ func makeSendTxMultisig(t require.TestingT, chainID string, sender, receiver *co
 	return txBytes
 }
 
-func makeCreateContractTx(t require.TestingT, chainID string, signers [][]byte, threshold int64) *Tx {
+func makeCreateContractTx(t Tester, chainID string, signers [][]byte, threshold int64) *Tx {
+	t.Helper()
 	msg := &multisig.CreateContractMsg{
 		Sigs:                signers,
 		ActivationThreshold: threshold,
@@ -568,7 +622,7 @@ func benchmarkSendTxWithMultisig(b *testing.B, nbAccounts, blockSize, nbContract
 
 	accounts := make([]*account, nbAccounts)
 	for i := 0; i < nbAccounts; i++ {
-		accounts[i] = &account{pk: crypto.GenPrivKeyEd25519()}
+		accounts[i] = &account{pk: weavetest.NewKey()}
 	}
 
 	contracts := make([]*contract, nbContracts)
@@ -634,7 +688,7 @@ func benchmarkSendTxWithMultisig(b *testing.B, nbAccounts, blockSize, nbContract
 func benchmarkSendTx(b *testing.B, nbAccounts, blockSize int) {
 	accounts := make([]*account, nbAccounts)
 	for i := 0; i < nbAccounts; i++ {
-		accounts[i] = &account{pk: crypto.GenPrivKeyEd25519()}
+		accounts[i] = &account{pk: weavetest.NewKey()}
 	}
 
 	chainID := "bench-net-22"
@@ -733,4 +787,9 @@ func createBatchMsg(messages []BatchMsg_Union) *Tx_BatchMsg {
 			Messages: messages,
 		},
 	}
+}
+
+type Tester interface {
+	require.TestingT
+	Helper()
 }
