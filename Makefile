@@ -33,6 +33,8 @@ tf:
 
 bench:
 	go test -bench=. -run=^$ -benchmem github.com/iov-one/weave/... | tee /tmp/weave_benchmarks.txt
+	curl 'https://benchsrv.herokuapp.com/upload/' --upload-file /tmp/weave_benchmarks.txt
+
 
 cover:
 	@ go test -covermode=$(MODE) -coverprofile=coverage/allpackages.out ./...
