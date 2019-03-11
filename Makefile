@@ -33,7 +33,11 @@ tf:
 
 bench: deps
 	go test -bench=. -run='xxx' -benchmem github.com/iov-one/weave/... | tee /tmp/weave_benchmarks.txt
-	curl 'https://benchsrv.herokuapp.com/upload/' -F 'content=@/tmp/weave_benchmarks.txt' -F "commit=$(CIRCLE_SHA1)"
+	curl 'https://benchsrv.herokuapp.com/upload/' \
+		-form 'content=@/tmp/weave_benchmarks.txt' \
+		-form "commit=$(CIRCLE_SHA1)" \
+		--fail \
+		--silent --show-error
 
 
 cover:
