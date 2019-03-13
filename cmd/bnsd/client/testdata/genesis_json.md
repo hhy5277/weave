@@ -2,7 +2,7 @@
 
 ### Ticker
 Ticker defines a currency token in the blockchain.
-```json
+``` 
   "currencies": [
     {
       "name": "A human readable description for doc",
@@ -13,7 +13,7 @@ Ticker defines a currency token in the blockchain.
 
 ### Wallets
 A is an address for a public key or contract with currency tokens filled.
-```json
+``` 
   "cash": [
     {
       "address": "E28AE9A6EB94FC88B73EB7CBD6B87BF93EB9BEF0",
@@ -41,7 +41,7 @@ The **admin threshold** though defines the number of member signatures required 
 To give you an example for a contract with 3 members: Alice, Bert and Charlie. Two of them should be required to approve any transaction but
 only when all three together sign a modification to the contract it should be updated:
 
-```json
+``` 
  "multisig": [
     {
       "activation_threshold": 2,
@@ -60,7 +60,7 @@ The distribution contract can receive and collect tokens like any other account 
 based on a weight based system to all it's members. 
 For example Alice and Bert get 1/4 each, Charlie 1/2
 
-```json
+``` 
   "distribution": [
     {
       "admin": "ZZZZ...",
@@ -89,7 +89,7 @@ In combination with a distribution account this can be used to release tokens to
 set that "never" expires the arbiter is in the only entity in control of this process. They can be released in chuncks
 for example either to the recipient to distribute them or the sender to burn them.
 The role of the arbiter requires therefore a lot of trust which can be modeled well with a multisig contract.     
-```json
+``` 
   "escrow": [
     {
       "amount": [
@@ -112,7 +112,7 @@ gconf is a configuration store intended to be used as a global, in-database conf
 defined by the `cash:collector_address`and `cash:minimal_fee` keys. Like any weave address the collector address
 can also point to a contract to distribute the amount within a group.
  
-```json
+``` 
   "gconf": {
     "cash:collector_address": "cond:distribution/revenue/0000000000000001", <-- distribution contract with ID=1
      "cash:minimal_fee": {
@@ -127,7 +127,7 @@ Our internal protbuf messages are identified by a unique bath that maps to the t
 a product fee to the operation.
 For Example 0.001 IOV for sending tokens; 10 IOV for a new escrow contract and 1 IOV for the update.
  
-```json
+``` 
   "gconf": {
 	"msgfee": [
 		{
