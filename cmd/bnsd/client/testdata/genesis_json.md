@@ -1,3 +1,4 @@
+# Config examples for the genesis.json app_state
 
 ### Ticker
 Ticker defines a currency token in the blockchain.
@@ -23,7 +24,7 @@ A is an address for a public key or contract with currency tokens filled.
         },
         {
           "ticker": "ALX",
-          "whole": 100
+          "whole": 100,
           "fractional": 10000000000000, <-- 1/10 of a whole
         }
       ]
