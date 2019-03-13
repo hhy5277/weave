@@ -104,10 +104,10 @@ The role of the arbiter requires therefore a lot of trust which can be modeled w
           "whole": 99999999
         }
       ],
-      "arbiter": "multisig/usage/0000000000000001", <-- multisig contract to relase or burn tokens
-      "recipient": "cond:distribution/revenue/0000000000000001", <-- a distribution contract
-      "sender": "0000000000000000000000000000000000000000", <-- non existing burn address
-      "timeout": 9223372036854775807 <-- very very high block height to never expire
+      "arbiter": "multisig/usage/0000000000000001",
+      "recipient": "cond:distribution/revenue/0000000000000001",
+      "sender": "0000000000000000000000000000000000000000",
+      "timeout": 9223372036854775807
     }
   ],
 ```
