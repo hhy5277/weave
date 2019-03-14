@@ -16,10 +16,15 @@ type Store interface {
 // Int returns an integer value stored under given name.
 // This function panics if configuration cannot be acquired.
 func Int(confStore Store, propName string) int {
-	var value int
-	loadInto(confStore, propName, &value)
+	value, ok := intCache[propName]
+	if !ok {
+		loadInto(confStore, propName, &value)
+		intCache[propName] = value
+	}
 	return value
 }
+
+var intCache = make(map[string]int)
 
 // Duration returns a duration value stored under given name.
 // This function panics if configuration cannot be acquired.
@@ -62,10 +67,15 @@ func Bytes(confStore Store, propName string) []byte {
 }
 
 func Coin(confStore Store, propName string) coin.Coin {
-	var value coin.Coin
-	loadInto(confStore, propName, &value)
+	value, ok := coinCache[propName]
+	if !ok {
+		loadInto(confStore, propName, &value)
+		coinCache[propName] = *value.Clone()
+	}
 	return value
 }
+
+var coinCache = make(map[string]coin.Coin)
 
 func loadInto(confStore Store, propName string, dest interface{}) {
 	key := []byte("gconf:" + propName)

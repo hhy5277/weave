@@ -8,6 +8,7 @@ import (
 
 	"github.com/iov-one/weave"
 	"github.com/iov-one/weave/coin"
+	"github.com/iov-one/weave/store"
 )
 
 func TestString(t *testing.T) {
@@ -85,4 +86,43 @@ type confStore []byte
 
 func (cs confStore) Get([]byte) []byte {
 	return cs
+}
+
+func BenchmarkMockedStoreInt(b *testing.B) {
+	db := confStore("1")
+	for i := 0; i < b.N; i++ {
+		Int(db, "whatever")
+	}
+}
+
+func BenchmarkMockedStoreCoin(b *testing.B) {
+	db := confStore(`{"ticker": "IOV", "whole": 1, "fractional": 1}`)
+	for i := 0; i < b.N; i++ {
+		Coin(db, "whatever")
+	}
+}
+
+func BenchmarkMemStoreInt(b *testing.B) {
+	db := store.MemStore()
+	if err := SetValue(db, "number", 421); err != nil {
+		b.Fatalf("cannot set value: %s", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Int(db, "number")
+	}
+}
+
+func BenchmarkMemStoreCoin(b *testing.B) {
+	db := store.MemStore()
+
+	if err := SetValue(db, "coin", coin.NewCoin(1, 1, "IOV")); err != nil {
+		b.Fatalf("cannot set value: %s", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Coin(db, "coin")
+	}
 }
