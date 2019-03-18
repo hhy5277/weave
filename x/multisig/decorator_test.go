@@ -26,21 +26,21 @@ func TestDecorator(t *testing.T) {
 
 	// the contract we'll be using in our tests
 	contractID1 := withContract(t, db, CreateContractMsg{
-		Sigs:                newSigs(a, b, c),
+		Participants:        newSigs(a, b, c),
 		ActivationThreshold: 2,
 		AdminThreshold:      3,
 	})
 
 	// contractID2 is used as a sig for contractID3
 	contractID2 := withContract(t, db, CreateContractMsg{
-		Sigs:                newSigs(d, e, f),
+		Participants:        newSigs(d, e, f),
 		ActivationThreshold: 2,
 		AdminThreshold:      3,
 	})
 
 	// contractID3 requires either sig for a or activation for contractID2
 	contractID3 := withContract(t, db, CreateContractMsg{
-		Sigs:                newSigs(a, MultiSigCondition(contractID2)),
+		Participants:        newSigs(a, MultiSigCondition(contractID2)),
 		ActivationThreshold: 1,
 		AdminThreshold:      2,
 	})
@@ -90,7 +90,7 @@ func TestDecorator(t *testing.T) {
 			multisigTx([]byte("foo"), []byte("bad id")),
 			[]weave.Condition{a, b},
 			nil,
-			errors.Wrapf(errors.ErrNotFound, contractNotFoundFmt, []byte("bad id")),
+			errors.ErrNotFound,
 		},
 		// contractID3 is activated by contractID2
 		{

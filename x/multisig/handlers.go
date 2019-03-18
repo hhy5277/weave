@@ -46,7 +46,7 @@ func (h CreateContractMsgHandler) Deliver(ctx weave.Context, db weave.KVStore, t
 	}
 
 	contract := &Contract{
-		Sigs:                msg.Sigs,
+		Participants:        msg.Participants,
 		ActivationThreshold: msg.ActivationThreshold,
 		AdminThreshold:      msg.AdminThreshold,
 	}
@@ -111,12 +111,12 @@ func (h UpdateContractMsgHandler) Deliver(ctx weave.Context, db weave.KVStore, t
 	}
 
 	contract := &Contract{
-		Sigs:                msg.Sigs,
+		Participants:        msg.Participants,
 		ActivationThreshold: msg.ActivationThreshold,
 		AdminThreshold:      msg.AdminThreshold,
 	}
 
-	obj := orm.NewSimpleObj(msg.Id, contract)
+	obj := orm.NewSimpleObj(msg.ContractID, contract)
 	err = h.bucket.Save(db, obj)
 	if err != nil {
 		return res, err
@@ -134,7 +134,7 @@ func (h UpdateContractMsgHandler) validate(ctx weave.Context, db weave.KVStore, 
 
 	updateContractMsg, ok := msg.(*UpdateContractMsg)
 	if !ok {
-		return nil, errors.WithType(errors.ErrInvalidMsg, msg)
+		return nil, errors.Wrapf(errors.ErrInvalidType, "%T", msg)
 	}
 
 	err = updateContractMsg.Validate()
@@ -142,26 +142,22 @@ func (h UpdateContractMsgHandler) validate(ctx weave.Context, db weave.KVStore, 
 		return nil, err
 	}
 
-	// load contract
-	obj, err := h.bucket.Get(db, updateContractMsg.Id)
+	obj, err := h.bucket.Get(db, updateContractMsg.ContractID)
 	if err != nil {
 		return nil, err
 	}
 	if obj == nil || (obj != nil && obj.Value() == nil) {
-		return nil, errors.Wrapf(errors.ErrNotFound, contractNotFoundFmt, updateContractMsg.Id)
+		return nil, errors.ErrNotFound
 	}
 	contract := obj.Value().(*Contract)
 
-	// retrieve sigs
 	var sigs []weave.Address
-	for _, sig := range contract.Sigs {
-		sigs = append(sigs, sig)
+	for _, p := range contract.Participants {
+		sigs = append(sigs, p.Signature)
 	}
-
-	// check sigs
 	authenticated := x.HasNAddresses(ctx, h.auth, sigs, int(contract.AdminThreshold))
 	if !authenticated {
-		return nil, errors.Wrapf(errors.ErrUnauthorized, "contract=%X", updateContractMsg.Id)
+		return nil, errors.ErrUnauthorized
 	}
 
 	return updateContractMsg, nil

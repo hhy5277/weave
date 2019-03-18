@@ -23,13 +23,8 @@ func newContextWithAuth(perms ...weave.Condition) (weave.Context, x.Authenticato
 }
 
 // newSigs creates an array with addresses from each condition
-func newSigs(perms ...weave.Condition) [][]byte {
-	// initial addresses controlling contract
-	var sigs [][]byte
-	for _, p := range perms {
-		sigs = append(sigs, p.Address())
-	}
-	return sigs
+func newSigs(perms ...weave.Condition) []*Participant {
+	panic("REMOVE")
 }
 
 // queryContract queries a contract from the bucket and handles errors
@@ -71,7 +66,7 @@ func TestCreateContractMsgHandler(t *testing.T) {
 		{
 			name: "valid use case",
 			msg: &CreateContractMsg{
-				Sigs:                newSigs(a, b, c),
+				Participants:        newSigs(a, b, c),
 				ActivationThreshold: 2,
 				AdminThreshold:      3,
 			},
@@ -85,29 +80,29 @@ func TestCreateContractMsgHandler(t *testing.T) {
 		{
 			name: "bad activation threshold",
 			msg: &CreateContractMsg{
-				Sigs:                newSigs(a, b, c),
+				Participants:        newSigs(a, b, c),
 				ActivationThreshold: 4,
 				AdminThreshold:      3,
 			},
-			err: errors.Wrap(errors.ErrInvalidMsg, invalidThreshold),
+			err: errors.ErrInvalidMsg,
 		},
 		{
 			name: "bad admin threshold",
 			msg: &CreateContractMsg{
-				Sigs:                newSigs(a, b, c),
+				Participants:        newSigs(a, b, c),
 				ActivationThreshold: 1,
-				AdminThreshold:      -1,
+				AdminThreshold:      0,
 			},
-			err: errors.Wrap(errors.ErrInvalidMsg, invalidThreshold),
+			err: errors.ErrInvalidMsg,
 		},
 		{
 			name: "0 activation threshold",
 			msg: &CreateContractMsg{
-				Sigs:                newSigs(a, b, c),
+				Participants:        newSigs(a, b, c),
 				ActivationThreshold: 0,
 				AdminThreshold:      1,
 			},
-			err: errors.Wrap(errors.ErrInvalidMsg, invalidThreshold),
+			err: errors.ErrInvalidMsg,
 		},
 	}
 
@@ -128,8 +123,9 @@ func TestCreateContractMsgHandler(t *testing.T) {
 		if test.err == nil {
 			require.NoError(t, err, test.name)
 			contract := queryContract(t, db, handler.bucket, res.Data)
+			var TODO []*Participant
 			require.EqualValues(t,
-				Contract{Sigs: msg.Sigs, ActivationThreshold: msg.ActivationThreshold, AdminThreshold: msg.AdminThreshold},
+				Contract{Participants: TODO, ActivationThreshold: msg.ActivationThreshold, AdminThreshold: msg.AdminThreshold},
 				contract,
 				test.name)
 		} else {
@@ -151,14 +147,14 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 
 	mutableID := withContract(t, db,
 		CreateContractMsg{
-			Sigs:                newSigs(a, b, c),
+			Participants:        newSigs(a, b, c),
 			ActivationThreshold: 1,
 			AdminThreshold:      2,
 		})
 
 	immutableID := withContract(t, db,
 		CreateContractMsg{
-			Sigs:                newSigs(a, b, c),
+			Participants:        newSigs(a, b, c),
 			ActivationThreshold: 1,
 			AdminThreshold:      4,
 		})
@@ -172,8 +168,8 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 		{
 			name: "authorized",
 			msg: &UpdateContractMsg{
-				Id:                  mutableID,
-				Sigs:                newSigs(a, b, c, d, e),
+				ContractID:          mutableID,
+				Participants:        newSigs(a, b, c, d, e),
 				ActivationThreshold: 4,
 				AdminThreshold:      5,
 			},
@@ -183,8 +179,8 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 		{
 			name: "unauthorised",
 			msg: &UpdateContractMsg{
-				Id:                  mutableID,
-				Sigs:                newSigs(a, b, c, d, e),
+				ContractID:          mutableID,
+				Participants:        newSigs(a, b, c, d, e),
 				ActivationThreshold: 4,
 				AdminThreshold:      5,
 			},
@@ -194,8 +190,8 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 		{
 			name: "immutable",
 			msg: &UpdateContractMsg{
-				Id:                  immutableID,
-				Sigs:                newSigs(a, b, c, d, e),
+				ContractID:          immutableID,
+				Participants:        newSigs(a, b, c, d, e),
 				ActivationThreshold: 4,
 				AdminThreshold:      5,
 			},
@@ -205,8 +201,8 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 		{
 			name: "bad change threshold",
 			msg: &UpdateContractMsg{
-				Id:                  mutableID,
-				Sigs:                newSigs(a, b, c, d, e),
+				ContractID:          mutableID,
+				Participants:        newSigs(a, b, c, d, e),
 				ActivationThreshold: 1,
 				AdminThreshold:      0,
 			},
@@ -230,9 +226,10 @@ func TestUpdateContractMsgHandler(t *testing.T) {
 		_, err = handler.Deliver(ctx, db, &weavetest.Tx{Msg: msg})
 		if test.err == nil {
 			require.NoError(t, err, test.name)
-			contract := queryContract(t, db, handler.bucket, msg.Id)
+			contract := queryContract(t, db, handler.bucket, msg.ContractID)
+			var TODO []*Participant
 			require.EqualValues(t,
-				Contract{Sigs: msg.Sigs, ActivationThreshold: msg.ActivationThreshold, AdminThreshold: msg.AdminThreshold},
+				Contract{Participants: TODO, ActivationThreshold: msg.ActivationThreshold, AdminThreshold: msg.AdminThreshold},
 				contract,
 				test.name)
 		} else {

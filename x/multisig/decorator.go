@@ -61,9 +61,9 @@ func (d Decorator) withMultisig(ctx weave.Context, store weave.KVStore, tx weave
 			}
 
 			// collect all sigs
-			sigs := make([]weave.Address, len(contract.Sigs))
-			for i, sig := range contract.Sigs {
-				sigs[i] = sig
+			sigs := make([]weave.Address, len(contract.Participants))
+			for i, p := range contract.Participants {
+				sigs[i] = p.Signature
 			}
 
 			// check sigs (can be sig or multisig)
@@ -86,7 +86,7 @@ func (d Decorator) getContract(store weave.KVStore, id []byte) (*Contract, error
 	}
 
 	if obj == nil || (obj != nil && obj.Value() == nil) {
-		return nil, errors.Wrapf(errors.ErrNotFound, contractNotFoundFmt, id)
+		return nil, errors.ErrNotFound
 	}
 
 	contract := obj.Value().(*Contract)

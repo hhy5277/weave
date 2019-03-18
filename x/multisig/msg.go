@@ -1,7 +1,6 @@
 package multisig
 
 import (
-	"github.com/iov-one/weave"
 	"github.com/iov-one/weave/errors"
 )
 
@@ -20,21 +19,8 @@ func (CreateContractMsg) Path() string {
 
 // Validate enforces sigs and threshold boundaries
 func (c *CreateContractMsg) Validate() error {
-	if len(c.Sigs) == 0 {
-		return errors.Wrap(errors.ErrInvalidMsg, "missing sigs")
-	}
-	if c.ActivationThreshold <= 0 || int(c.ActivationThreshold) > len(c.Sigs) {
-		return errors.Wrap(errors.ErrInvalidMsg, invalidThreshold)
-	}
-	if c.AdminThreshold <= 0 {
-		return errors.Wrap(errors.ErrInvalidMsg, invalidThreshold)
-	}
-	for _, a := range c.Sigs {
-		if err := weave.Address(a).Validate(); err != nil {
-			return err
-		}
-	}
-	return nil
+	return validateWeights(errors.ErrInvalidMsg,
+		c.Participants, c.ActivationThreshold, c.AdminThreshold)
 }
 
 // Path fulfills weave.Msg interface to allow routing
@@ -44,19 +30,48 @@ func (UpdateContractMsg) Path() string {
 
 // Validate enforces sigs and threshold boundaries
 func (c *UpdateContractMsg) Validate() error {
-	if len(c.Sigs) == 0 {
-		return errors.Wrap(errors.ErrInvalidMsg, "missing sigs")
+	return validateWeights(errors.ErrInvalidMsg,
+		c.Participants, c.ActivationThreshold, c.AdminThreshold)
+}
+
+// validateWeights returns an error if given participants and thresholds
+// configuration is not valid. This check is done on model and messages so
+// instead of copying the code it is extracted into this function.
+func validateWeights(
+	baseErr error,
+	ps []*Participant,
+	activationThreshold Weight,
+	adminThreshold Weight,
+) error {
+	if len(ps) == 0 {
+		return errors.Wrap(baseErr, "missing participants")
 	}
-	if c.ActivationThreshold <= 0 || int(c.ActivationThreshold) > len(c.Sigs) {
-		return errors.Wrap(errors.ErrInvalidMsg, invalidThreshold)
-	}
-	if c.AdminThreshold <= 0 {
-		return errors.Wrap(errors.ErrInvalidMsg, invalidThreshold)
-	}
-	for _, a := range c.Sigs {
-		if err := weave.Address(a).Validate(); err != nil {
-			return err
+
+	for _, p := range ps {
+		if err := p.Power.Validate(); err != nil {
+			return errors.Wrapf(err, "participant %s", p.Signature)
 		}
+		if err := p.Signature.Validate(); err != nil {
+			return errors.Wrapf(err, "participant %s", p.Signature)
+		}
+	}
+	if err := activationThreshold.Validate(); err != nil {
+		return errors.Wrap(err, "activation threshold")
+	}
+	if err := adminThreshold.Validate(); err != nil {
+		return errors.Wrap(err, "admin threshold")
+	}
+
+	var total Weight
+	for _, p := range ps {
+		total += p.Power
+	}
+
+	if activationThreshold > total {
+		return errors.Wrap(baseErr, "activation threshold greater than total power")
+	}
+	if adminThreshold > total {
+		return errors.Wrap(baseErr, "admin threshold greater than total power")
 	}
 	return nil
 }
