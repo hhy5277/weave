@@ -14,25 +14,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 )
 
-// Strategy defines which functions we call in ProcessAllTxs.
-type Strategy uint8
-
-// Has return true if this strategy contains given one - given strategry is a
-// subset of this one.
-func (s Strategy) Has(other Strategy) bool {
-	return s&other != 0
-}
-
-const (
-	Check Strategy = 1 << iota
-	NoBenchCheck
-	Deliver
-	NoBenchDeliver
-
-	RequireChange
-	RequireNoChange
-)
-
 // WeaveRunner provides a translation layer between an ABCI interface and a
 // weave application. It takes care of serializing messages and creating
 // blocks.
@@ -151,86 +132,6 @@ func (w *WeaveRunner) InBlock(executeTx func(WeaveApp) error) bool {
 	// hash only if the state was modified.
 	finalHash := w.app.Commit().Data
 	return !bytes.Equal(initialHash, finalHash)
-}
-
-// ProcessAllTxs will run all included txs, split into blocksize.
-// It will Fail() if any tx returns an error, or if at any block,
-// the appHash does not change (if should change, otherwise, require it stable)
-func (w *WeaveRunner) ProcessAllTxs(blocks [][]weave.Tx, st Strategy) {
-	for _, txs := range blocks {
-		changed := w.InBlock(applyStategy(w.t, txs, st))
-
-		if st.Has(RequireChange) && !changed {
-			w.t.Fatal("state change required")
-		}
-		if st.Has(RequireNoChange) && changed {
-			w.t.Fatal("no state change required")
-		}
-	}
-}
-
-func applyStategy(t testing.TB, txs []weave.Tx, st Strategy) func(WeaveApp) error {
-	// For benchmark we want to control the measurement time.
-	b, isBench := t.(*testing.B)
-
-	return func(wapp WeaveApp) error {
-		if st.Has(Check) {
-			if isBench && st.Has(NoBenchCheck) {
-				b.StopTimer()
-			}
-			for i, tx := range txs {
-				if err := wapp.CheckTx(tx); err != nil {
-					return errors.Wrapf(err, "check transaction %d", i)
-				}
-			}
-			if isBench && st.Has(NoBenchCheck) {
-				b.StartTimer()
-			}
-		}
-
-		if st.Has(Deliver) {
-			if isBench && st.Has(NoBenchDeliver) {
-				b.StopTimer()
-			}
-			for i, tx := range txs {
-				if err := wapp.DeliverTx(tx); err != nil {
-					return errors.Wrapf(err, "deliver transaction %d", i)
-				}
-			}
-			if isBench && st.Has(NoBenchDeliver) {
-				b.StartTimer()
-			}
-		}
-
-		return nil
-	}
-}
-
-// SplitTxs will break one slice of transactions into many slices,
-// one per block. It will fill up to txPerBlockx txs in each block
-// The last block may have less, if there is not enough for a full block
-func SplitTxs(txs []weave.Tx, txPerBlock int) [][]weave.Tx {
-	numBlocks := numBlocks(len(txs), txPerBlock)
-	res := make([][]weave.Tx, numBlocks)
-
-	// full chunks for all but the last block
-	for i := 0; i < numBlocks-1; i++ {
-		res[i], txs = txs[:txPerBlock], txs[txPerBlock:]
-	}
-
-	// remainder in the last block
-	res[numBlocks-1] = txs
-	return res
-}
-
-// numBlocks returns total number of blocks for benchmarks that split b.N
-// into many smaller blocks
-func numBlocks(totalTx, txPerBlock int) int {
-	runs := totalTx / txPerBlock
-	if totalTx%txPerBlock > 0 {
-		return runs + 1
-	}
-	return runs
 }
 
 //----- mocking out ReadonlyKVStore -----//

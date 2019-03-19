@@ -86,47 +86,65 @@ func BenchmarkBNSDSendToken(b *testing.B) {
 	cases := map[string]struct {
 		txPerBlock int
 		fee        coin.Coin
-		strategy   weavetest.Strategy
+		opts       weavetest.ProcessOptions
 	}{
 		"1 tx, no fee": {
-			txPerBlock: 1,
-			fee:        coin.Coin{},
-			strategy:   weavetest.CheckAndDeliver,
+			fee: coin.Coin{},
+			opts: weavetest.ProcessOptions{}.
+				BenchCheckAndDeliver(1).
+				RequireChange(),
 		},
 		"1 tx, no fee (deliver only)": {
-			txPerBlock: 1,
-			fee:        coin.Coin{},
-			strategy:   weavetest.DeliverOnly,
+			fee: coin.Coin{},
+			opts: weavetest.ProcessOptions{}.
+				ExecDeliver().
+				BenchDeliver().
+				TxBlockSize(1).
+				RequireChange(),
 		},
 		"10 tx, no fee": {
-			txPerBlock: 10,
-			fee:        coin.Coin{},
-			strategy:   weavetest.CheckAndDeliver,
+			fee: coin.Coin{},
+			opts: weavetest.ProcessOptions{}.
+				BenchCheckAndDeliver(10).
+				RequireChange(),
 		},
 		"100 tx, no fee": {
-			txPerBlock: 100,
-			fee:        coin.Coin{},
-			strategy:   weavetest.CheckAndDeliver,
+			fee: coin.Coin{},
+			opts: weavetest.ProcessOptions{}.
+				BenchCheckAndDeliver(100).
+				RequireChange(),
 		},
 		"100 tx, with fee": {
 			txPerBlock: 100,
 			fee:        coin.Coin{Whole: 1, Ticker: "IOV"},
-			strategy:   weavetest.CheckAndDeliver,
+			opts: weavetest.ProcessOptions{}.
+				BenchCheckAndDeliver(100).
+				RequireChange(),
 		},
 		"100 tx, with fee (check only)": {
-			txPerBlock: 100,
-			fee:        coin.Coin{Whole: 1, Ticker: "IOV"},
-			strategy:   weavetest.CheckOnly,
+			fee: coin.Coin{Whole: 1, Ticker: "IOV"},
+			opts: weavetest.ProcessOptions{}.
+				ExecCheck().
+				BenchCheck().
+				TxBlockSize(100).
+				RequireNoChange(),
 		},
 		"100 tx, with fee (deliver only)": {
-			txPerBlock: 100,
-			fee:        coin.Coin{Whole: 1, Ticker: "IOV"},
-			strategy:   weavetest.DeliverOnly,
+			fee: coin.Coin{Whole: 1, Ticker: "IOV"},
+			opts: weavetest.ProcessOptions{}.
+				ExecDeliver().
+				BenchDeliver().
+				TxBlockSize(100).
+				RequireChange(),
 		},
 		"100 tx, with fee (deliver with precheck)": {
-			txPerBlock: 100,
-			fee:        coin.Coin{Whole: 1, Ticker: "IOV"},
-			strategy:   weavetest.DeliverWithPrecheck,
+			fee: coin.Coin{Whole: 1, Ticker: "IOV"},
+			opts: weavetest.ProcessOptions{}.
+				ExecCheck().
+				ExecDeliver().
+				BenchDeliver().
+				TxBlockSize(100).
+				RequireChange(),
 		},
 	}
 
@@ -136,7 +154,11 @@ func BenchmarkBNSDSendToken(b *testing.B) {
 			runner := weavetest.NewWeaveRunner(b, bnsd, "mychain")
 			runner.InitChain(makeGenesis(tc.fee))
 
-			// prepare some helpers
+			defer func() {
+				b.StopTimer()
+				cleanup()
+			}()
+
 			aliceNonce := NewNonce(runner, alice)
 			var fees *cash.FeeInfo
 			if !tc.fee.IsZero() {
@@ -146,7 +168,8 @@ func BenchmarkBNSDSendToken(b *testing.B) {
 				}
 			}
 
-			// generate all transactions
+			// Generate all transactions before so that this
+			// process is not part of the benchmark.
 			txs := make([]weave.Tx, b.N)
 			for k := 0; k < b.N; k++ {
 				tx := &Tx{
@@ -172,16 +195,14 @@ func BenchmarkBNSDSendToken(b *testing.B) {
 				txs[k] = tx
 
 				// must reset nonce per block for CheckOnly
-				if tc.strategy == weavetest.CheckOnly && (k+1)%tc.txPerBlock == 0 {
+				if false { // TODO
 					aliceNonce = NewNonce(runner, alice)
 				}
 			}
 
-			blocks := weavetest.SplitTxs(txs, tc.txPerBlock)
 			b.ResetTimer()
-			runner.ProcessAllTxs(blocks, tc.strategy)
-			b.StopTimer()
-			cleanup()
+
+			runner.Process(txs, tc.opts)
 		})
 	}
 }
