@@ -2,7 +2,6 @@ package multisig
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/iov-one/weave"
@@ -63,87 +62,69 @@ func TestDecorator(t *testing.T) {
 		return ContractTx{Tx: tx, MultisigID: multisig}
 	}
 
-	cases := []struct {
+	cases := map[string]struct {
 		tx      weave.Tx
 		signers []weave.Condition
 		perms   []weave.Condition
 		err     error
 	}{
-		// doesn't support multisig interface
-		{
-			&weavetest.Tx{Msg: &weavetest.Msg{Serialized: []byte{1, 2, 3}}},
-			[]weave.Condition{a},
-			nil,
-			nil,
+		"doesn't support multisig interface": {
+			tx:      &weavetest.Tx{Msg: &weavetest.Msg{Serialized: []byte{1, 2, 3}}},
+			signers: []weave.Condition{a},
 		},
-		// Correct interface but no content
-		{
-			multisigTx([]byte("john"), nil),
-			[]weave.Condition{a},
-			nil,
-			nil,
+		"Correct interface but no content": {
+			tx:      multisigTx([]byte("john"), nil),
+			signers: []weave.Condition{a},
 		},
-		// with multisig contract
-		{
-			multisigTx([]byte("foo"), contractID1),
-			[]weave.Condition{a, b},
-			[]weave.Condition{MultiSigCondition(contractID1)},
-			nil,
+		"with multisig contract": {
+			tx:      multisigTx([]byte("foo"), contractID1),
+			signers: []weave.Condition{a, b},
+			perms:   []weave.Condition{MultiSigCondition(contractID1)},
 		},
-		// with multisig contract but not enough signatures to activate
-		{
-			multisigTx([]byte("foo"), contractID1),
-			[]weave.Condition{a},
-			nil,
-			errors.Wrapf(errors.ErrUnauthorized, "contract=%X", contractID1),
+		"with multisig contract but not enough signatures to activate": {
+			tx:      multisigTx([]byte("foo"), contractID1),
+			signers: []weave.Condition{a},
+			err:     errors.Wrapf(errors.ErrUnauthorized, "contract=%X", contractID1),
 		},
-		// with invalid multisig contract ID
-		{
-			multisigTx([]byte("foo"), []byte("bad id")),
-			[]weave.Condition{a, b},
-			nil,
-			errors.ErrNotFound,
+		"with invalid multisig contract ID": {
+			tx:      multisigTx([]byte("foo"), []byte("bad id")),
+			signers: []weave.Condition{a, b},
+			err:     errors.ErrNotFound,
 		},
-		// contractID3 is activated by contractID2
-		{
-			multisigTx([]byte("foo"), contractID2, contractID3),
-			[]weave.Condition{d, e},
-			[]weave.Condition{MultiSigCondition(contractID2), MultiSigCondition(contractID3)},
-			nil,
+		"contractID3 is activated by contractID2": {
+			tx:      multisigTx([]byte("foo"), contractID2, contractID3),
+			signers: []weave.Condition{d, e},
+			perms:   []weave.Condition{MultiSigCondition(contractID2), MultiSigCondition(contractID3)},
 		},
-		// contractID3 is activated by a
-		{
-			multisigTx([]byte("foo"), contractID3),
-			[]weave.Condition{a},
-			[]weave.Condition{MultiSigCondition(contractID3)},
-			nil,
+		"contractID3 is activated by a": {
+			tx:      multisigTx([]byte("foo"), contractID3),
+			signers: []weave.Condition{a},
+			perms:   []weave.Condition{MultiSigCondition(contractID3)},
 		},
-		// contractID3 is not activated
-		{
-			multisigTx([]byte("foo"), contractID3),
-			[]weave.Condition{d, e}, // cconditions for ontractID2 are there but ontractID2 must be passed explicitly
-			nil,
-			errors.Wrapf(errors.ErrUnauthorized, "contract=%X", contractID3),
+		"contractID3 is not activated": {
+			tx: multisigTx([]byte("foo"), contractID3),
+			// cconditions for ontractID2 are there but ontractID2 must be passed explicitly
+			signers: []weave.Condition{d, e},
+			err:     errors.Wrapf(errors.ErrUnauthorized, "contract=%X", contractID3),
 		},
 	}
 
-	// the handler we're chaining with the decorator
-	h := new(MultisigCheckHandler)
-	for i, tc := range cases {
-		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+	for testName, tc := range cases {
+		t.Run(testName, func(t *testing.T) {
 			ctx := context.Background()
 			ctx = weave.WithHeight(ctx, 100)
 			auth := &weavetest.CtxAuth{Key: "authKey"}
 			ctx = auth.SetConditions(ctx, tc.signers...)
 			d := NewDecorator(x.ChainAuth(auth, Authenticate{}))
 
-			stack := weavetest.Decorate(h, d)
+			var hn MultisigCheckHandler
+			stack := weavetest.Decorate(&hn, d)
 			_, err := stack.Check(ctx, db, tc.tx)
 			if tc.err != nil {
 				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.perms, h.Perms)
+				assert.Equal(t, tc.perms, hn.Perms)
 			}
 
 			_, err = stack.Deliver(ctx, db, tc.tx)
@@ -151,7 +132,7 @@ func TestDecorator(t *testing.T) {
 				require.EqualError(t, err, tc.err.Error())
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.perms, h.Perms)
+				assert.Equal(t, tc.perms, hn.Perms)
 			}
 		})
 	}
