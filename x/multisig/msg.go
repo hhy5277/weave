@@ -73,5 +73,12 @@ func validateWeights(
 	if adminThreshold > total {
 		return errors.Wrap(baseErr, "admin threshold greater than total power")
 	}
+
+	if activationThreshold > adminThreshold {
+		// This configuration does not make any sense. It is easier to
+		// change the multisig as an admin than to activate it.
+		return errors.Wrap(baseErr, "activation threshold greater than the admin threshold")
+	}
+
 	return nil
 }

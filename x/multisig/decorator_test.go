@@ -1,6 +1,7 @@
 package multisig
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -25,22 +26,33 @@ func TestDecorator(t *testing.T) {
 	f := weavetest.NewCondition()
 
 	// the contract we'll be using in our tests
-	contractID1 := withContract(t, db, CreateContractMsg{
-		Participants:        newSigs(a, b, c),
+	contractID1 := createContract(t, db, CreateContractMsg{
+		Participants: []*Participant{
+			{Power: 1, Signature: a.Address()},
+			{Power: 1, Signature: b.Address()},
+			{Power: 1, Signature: c.Address()},
+		},
 		ActivationThreshold: 2,
 		AdminThreshold:      3,
 	})
 
 	// contractID2 is used as a sig for contractID3
-	contractID2 := withContract(t, db, CreateContractMsg{
-		Participants:        newSigs(d, e, f),
+	contractID2 := createContract(t, db, CreateContractMsg{
+		Participants: []*Participant{
+			{Power: 1, Signature: d.Address()},
+			{Power: 1, Signature: e.Address()},
+			{Power: 1, Signature: f.Address()},
+		},
 		ActivationThreshold: 2,
 		AdminThreshold:      3,
 	})
 
 	// contractID3 requires either sig for a or activation for contractID2
-	contractID3 := withContract(t, db, CreateContractMsg{
-		Participants:        newSigs(a, MultiSigCondition(contractID2)),
+	contractID3 := createContract(t, db, CreateContractMsg{
+		Participants: []*Participant{
+			{Power: 1, Signature: a.Address()},
+			{Power: 1, Signature: MultiSigCondition(contractID2).Address()},
+		},
 		ActivationThreshold: 1,
 		AdminThreshold:      2,
 	})
@@ -119,7 +131,10 @@ func TestDecorator(t *testing.T) {
 	h := new(MultisigCheckHandler)
 	for i, tc := range cases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
-			ctx, auth := newContextWithAuth(tc.signers...)
+			ctx := context.Background()
+			ctx = weave.WithHeight(ctx, 100)
+			auth := &weavetest.CtxAuth{Key: "authKey"}
+			ctx = auth.SetConditions(ctx, tc.signers...)
 			d := NewDecorator(x.ChainAuth(auth, Authenticate{}))
 
 			stack := weavetest.Decorate(h, d)
@@ -175,4 +190,19 @@ var _ weave.Tx = ContractTx{}
 
 func (p ContractTx) GetMultisig() [][]byte {
 	return p.MultisigID
+}
+
+func createContract(t *testing.T, db weave.KVStore, msg CreateContractMsg) []byte {
+	k := weavetest.NewCondition()
+	ctx := context.Background()
+	ctx = weave.WithHeight(ctx, 100)
+	auth := &weavetest.CtxAuth{Key: "authKey"}
+	ctx = auth.SetConditions(ctx, k)
+	handler := CreateContractMsgHandler{
+		auth:   auth,
+		bucket: NewContractBucket(),
+	}
+	res, err := handler.Deliver(ctx, db, &weavetest.Tx{Msg: &msg})
+	require.NoError(t, err, "cannot deliver")
+	return res.Data
 }

@@ -69,7 +69,7 @@ func TestHandlers(t *testing.T) {
 		},
 	}
 
-	for testName, tc := range cases {
+	for testName, _ := range cases {
 		t.Run(testName, func(t *testing.T) {
 
 		})
